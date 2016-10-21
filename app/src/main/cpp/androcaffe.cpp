@@ -1,30 +1,63 @@
+
+#include "androcaffe.h"
+#include "classify.h"
 #include <jni.h>
 #include <string>
 #include <android/bitmap.h>
-#include "androcaffe.h"
-#include "classify.h"
+#include <opencv2/imgproc/imgproc.hpp>
 
+jint StdStrFromJniStr(JNIEnv* env, jstring jniStr, std::string &stdStr) {
+    jint retCode = 0;
+
+    const char * res = NULL;
+
+    jboolean isCopy = true;
+    res = env->GetStringUTFChars(jniStr, &isCopy);
+    if(true != isCopy && NULL != res) {
+        retCode = -1;
+    }
+    stdStr = std::string(res);
+
+    env->ReleaseStringUTFChars(jniStr, res);
+
+    return retCode;
+}
+
+Classifier *gClassify = NULL;
 extern "C"
 jint
-Java_com_gputech_androcaffe_MainActivity_jniCaffeInit(JNIEnv* env) {
-
+Java_com_gputech_androcaffe_MainActivity_jniCaffeInit(JNIEnv* env,
+                                                      jclass clazz,
+                                                      jstring model_file,
+                                                      jstring trained_file,
+                                                      jstring mean_file,
+                                                      jstring label_file) {
     jint retCode = -1;
-    const char *fPath;
+    std::string model_str;
+    std::string trained_str;
+    std::string mean_str;
+    std::string label_str;
+
     do {
-
-        fPath = "/data/data/com.gputech.androcaffe/app_execdir/deploy.prototxt";
-        if((retCode = loadPrototxt(fPath)) != 0) {
-            LOGE("loadPrototxt(%s) failed...\n", fPath);
+        if((retCode = StdStrFromJniStr(env, model_file, model_str)) != 0) {
+            break;
+        }
+        if((retCode = StdStrFromJniStr(env, trained_file, trained_str)) != 0) {
+            break;
+        }
+        if((retCode = StdStrFromJniStr(env, mean_file, mean_str)) != 0) {
+            break;
+        }
+        if((retCode = StdStrFromJniStr(env, label_file, label_str)) != 0) {
             break;
         }
 
-        fPath = "/data/data/com.gputech.androcaffe/app_execdir/snapshot_iter_10000.caffemodel";
-        if((retCode = loadCaffeModel(fPath)) != 0) {
-            LOGE("loadPrototxt(%s) failed...\n", fPath);
+        gClassify = new Classifier(model_str, trained_str, mean_str, label_str);
+        if(NULL == gClassify) {
             break;
         }
-
         retCode = 0;
+
     }while(0);
 
     return retCode;
@@ -35,40 +68,47 @@ extern "C"
 jint
 Java_com_gputech_androcaffe_MainActivity_jniDoClassify(JNIEnv* env,
                                                        jclass clazz,
-                                                       jobject bitmapIn,
-                                                       jintArray info) {
-    void*	bi;
-    void*   bo;
-    jint*   i;
+                                                       jstring imgPath) {
 
     jint retCode = -1;
     LOGI("jniDoClassify +--->\n");
 
+    const char * imgPathStr = NULL;
+    jboolean isCopy = true;
+
+    imgPathStr = env->GetStringUTFChars(imgPath, &isCopy);
+
     do {
-        if((i = env->GetIntArrayElements(info, NULL)) == NULL) {
-            LOGE("env->GetIntArrayElements failed...\n");
-            break;
-        }
-        if( ANDROID_BITMAP_RESULT_SUCCESS != AndroidBitmap_lockPixels(env, bitmapIn, &bi)) {
-            LOGE("AndroidBitmap_lockPixels(inputImage) failed...\n");
+
+        if(true != isCopy && NULL != imgPathStr) {
             break;
         }
 
-        if((retCode = classify((unsigned char *)bi, (int *)i)) != 0 ) {
-            LOGE("classify() failed...\n");
-            break;
+        cv::Mat img = cv::imread(imgPathStr, -1);
+        std::vector<Prediction> predictions = gClassify->Classify(img);
+
+        /* Print the top N predictions. */
+        for (size_t i = 0; i < predictions.size(); ++i) {
+            Prediction p = predictions[i];
+            LOGI("%f - %s", p.second, static_cast<std::string>(p.first).c_str());
         }
 
-        if(ANDROID_BITMAP_RESULT_SUCCESS != AndroidBitmap_unlockPixels(env, bitmapIn)) {
-            LOGE("AndroidBitmap_unlockPixels(inputImage) failed...\n");
-            break;
-        }
-
-        env->ReleaseIntArrayElements(info, i, 0);
         retCode = 0;
     }while(0);
+
+    env->ReleaseStringUTFChars(imgPath, imgPathStr);
 
     LOGI("<----jniDoClassify\n");
 
     return retCode;
 }
+
+extern "C"
+void
+Java_com_gputech_androcaffe_MainActivity_jniCaffeDeInit(JNIEnv* env) {
+    if(NULL != gClassify) {
+        delete gClassify;
+        gClassify = NULL;
+    }
+}
+

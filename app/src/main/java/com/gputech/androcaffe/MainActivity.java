@@ -50,6 +50,7 @@ public class MainActivity extends AppCompatActivity {
     private Bitmap inBmp;
     private Bitmap outBmp;
     final int info[] = new int[3]; // Width, Height, Execution time (ms)
+    private String dbDirPath;
 
     private boolean loadNativeLib(final String lib) {
         boolean ret = true;
@@ -63,27 +64,10 @@ public class MainActivity extends AppCompatActivity {
         return ret;
     }
 
-    /* Reads an asset text file into a String buffer */
-    private boolean readFileIntoBuffer(final String f) {
+    /* Replaces an exisiting training data set 'if present' with a new one from absPath */
+    private boolean importCaffeTrainSet(final String absPath) {
         boolean ret = true;
-        InputStream in;
-        try {
-            in = getAssets().open(f);
-            final File of = new File(getDir("execdir", MODE_PRIVATE), f);
-
-            final OutputStream out = new FileOutputStream(of);
-
-            final byte b[] = new byte[65535];
-            int sz = 0;
-            while ((sz = in.read(b)) > 0) {
-                out.write(b, 0, sz);
-            }
-            in.close();
-            out.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-            ret = false;
-        }
+        Toast.makeText(mContext, absPath, Toast.LENGTH_SHORT).show();
         return ret;
     }
 
@@ -111,16 +95,6 @@ public class MainActivity extends AppCompatActivity {
                 break;
             }
 
-            if (true != readFileIntoBuffer("deploy.prototxt")) {
-                mStatus = Status.STATUS_DPXT_LOAD_FAILED;
-                break;
-            }
-
-            if (true != readFileIntoBuffer("snapshot_iter_10000.caffemodel")) {
-                mStatus = Status.STATUS_DPXT_LOAD_FAILED;
-                break;
-            }
-
             mStatus = Status.STATUS_SUCCESS;
 
         }while(false);
@@ -142,19 +116,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void doSelectImage(View v) {
+    public void doSelectTrainingData(View v) {
         if(mStatus != Status.STATUS_SUCCESS) {
             Toast.makeText(mContext, mStatus.toString(), Toast.LENGTH_LONG).show();
             return;
         }
         Arrays.fill(info, 0);
 
-        Intent photoPickerIntent = new Intent(Intent.ACTION_PICK,
-                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-        photoPickerIntent.setType("image/*");
-        startActivityForResult(photoPickerIntent, SELECT_PHOTO);
-        Toast.makeText(mContext, "Select image...", Toast.LENGTH_LONG).show();
-
+        importCaffeTrainSet("/storage/ECC9-5128/Caffe");
     }
 
     @Override
@@ -164,6 +133,7 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == SELECT_PHOTO && resultCode == RESULT_OK && data != null) {
 
             Uri pickedImage = data.getData();
+            Toast.makeText(mContext, "Select image...", Toast.LENGTH_LONG).show();
             String[] filePath = { MediaStore.Images.Media.DATA };
             Cursor cursor = getContentResolver().query(pickedImage, filePath, null, null, null);
             cursor.moveToFirst();

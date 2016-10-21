@@ -31,8 +31,8 @@
             android:layout_height="50dp"
             android:textSize="20sp"
             android:layout_weight="0.33"
-            android:onClick="doSelectImage"
-            android:text="Select"
+            android:onClick="doSelectTrainingData"
+            android:text="Select Data Set"
             android:visibility="visible" />
 
         <Button

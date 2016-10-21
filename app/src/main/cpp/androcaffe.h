@@ -5,6 +5,9 @@
 #include <math.h>
 
 #include <android/log.h>
+
+#define CPU_ONLY
+
 #define app_name "AndroCaffe"
 
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, app_name, __VA_ARGS__))
