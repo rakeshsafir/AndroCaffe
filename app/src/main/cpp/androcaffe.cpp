@@ -1,10 +1,12 @@
 
 #include "androcaffe.h"
 #include "classify.h"
+
 #include <jni.h>
 #include <string>
 #include <android/bitmap.h>
 #include <opencv2/imgproc/imgproc.hpp>
+
 
 jint StdStrFromJniStr(JNIEnv* env, jstring jniStr, std::string &stdStr) {
     jint retCode = 0;
@@ -68,23 +70,32 @@ extern "C"
 jint
 Java_com_gputech_androcaffe_MainActivity_jniDoClassify(JNIEnv* env,
                                                        jclass clazz,
-                                                       jstring imgPath) {
+                                                       jstring imgPath,
+                                                       jintArray info) {
 
     jint retCode = -1;
     LOGI("jniDoClassify +--->\n");
 
-    const char * imgPathStr = NULL;
-    jboolean isCopy = true;
+    jint *i = NULL;
+    const char *imgPathStr = NULL;
 
-    imgPathStr = env->GetStringUTFChars(imgPath, &isCopy);
+    jboolean isCopy = false;
+
 
     do {
-
-        if(true != isCopy && NULL != imgPathStr) {
+        isCopy = false;
+        i = (env)->GetIntArrayElements(info, &isCopy);
+        if(true != isCopy || NULL == i) {
             break;
         }
 
-        cv::Mat img = cv::imread(imgPathStr, -1);
+        isCopy = false;
+        imgPathStr = env->GetStringUTFChars(imgPath, &isCopy);
+        if(true != isCopy || NULL == imgPathStr) {
+            break;
+        }
+
+        cv::Mat img = cv::imread(imgPathStr, CV_LOAD_IMAGE_COLOR);
         std::vector<Prediction> predictions = gClassify->Classify(img);
 
         /* Print the top N predictions. */
@@ -96,7 +107,17 @@ Java_com_gputech_androcaffe_MainActivity_jniDoClassify(JNIEnv* env,
         retCode = 0;
     }while(0);
 
-    env->ReleaseStringUTFChars(imgPath, imgPathStr);
+    if(NULL != imgPathStr) {
+        env->ReleaseStringUTFChars(imgPath, imgPathStr);
+        imgPathStr = NULL;
+    }
+
+    if(NULL != i) {
+        env->ReleaseIntArrayElements(info, i, 0);
+        i = NULL;
+    }
+
+
 
     LOGI("<----jniDoClassify\n");
 

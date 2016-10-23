@@ -3,27 +3,92 @@ package com.gputech.androcaffe;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.Bitmap.Config;
-import android.graphics.BitmapFactory;
-import android.media.Image;
 import android.net.Uri;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.widget.SearchView;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.FileFilter;
+import java.io.FilenameFilter;
 import java.util.Arrays;
+
+class CaffeModelFilter implements FileFilter {
+    @Override
+    public boolean accept(File f) {
+        if ( f.isHidden() || !f.canRead() ) {
+            return false;
+        }
+
+        if ( f.isDirectory() ) {
+            return false;
+        }
+        return checkFileExtension( f );
+    }
+
+    private boolean checkFileExtension( File f ) {
+        String ext = getFileExtension(f);
+        if ( ext == null) return false;
+        try {
+            if ( SupportedFileFormat.valueOf(ext.toUpperCase()) != null ) {
+                return true;
+            }
+        } catch(IllegalArgumentException e) {
+            //Not known enum value
+            return false;
+        }
+        return false;
+    }
+
+    private boolean checkFileExtension( String fileName ) {
+        String ext = getFileExtension(fileName);
+        if ( ext == null) return false;
+        try {
+            if ( SupportedFileFormat.valueOf(ext.toUpperCase()) != null ) {
+                return true;
+            }
+        } catch(IllegalArgumentException e) {
+            //Not known enum value
+            return false;
+        }
+        return false;
+    }
+    public String getFileExtension( File f ) {
+        return getFileExtension( f.getName() );
+    }
+
+    public String getFileExtension( String fileName ) {
+        int i = fileName.lastIndexOf('.');
+        if (i > 0) {
+            return fileName.substring(i+1);
+        } else
+            return null;
+    }
+    public enum SupportedFileFormat {
+        MODEL("caffemodel"),
+        PROTOTXT("prototxt"),
+        BINPROTO("binaryproto"),
+        TXT("txt");
+
+        private String filesuffix;
+
+        SupportedFileFormat(String filesuffix) {
+            this.filesuffix = filesuffix;
+        }
+
+        public String getFilesuffix() {
+            return filesuffix;
+        }
+    }
+}
 
 public class MainActivity extends AppCompatActivity {
     enum Status {
@@ -35,22 +100,30 @@ public class MainActivity extends AppCompatActivity {
         STATUS_UNKNOWN
     }
     /* JNI Interfaces */
-    public static native int jniCaffeInit();
-    public static native int jniDoClassify(Bitmap bmpIn, int info[]);
+    public static native int jniCaffeInit(String model_file,
+                                          String trained_file,
+                                          String mean_file,
+                                          String label_file);
+
+    public static native int jniDoClassify(String imgPath, int info[]);
 
 
     /* UI Components */
-    TextView    textView;
-    ImageView   imageView;
+    EditText    caffeModelPath;
+    EditText    caffeTrainPath;
+    EditText    caffeMeanPath;
+    EditText    caffeLabelPath;
+    EditText    caffeImagePath;
+    TextView    resultTextView;
 
     protected static final String TAG = "AndroCaffeActivity";
-    private int SELECT_PHOTO = 1;
+    private int SELECT_MODEL_FILE = 1;
+    private int SELECT_TRAIN_FILE = 2;
+    private int SELECT_MEAN_FILE = 3;
+    private int SELECT_LABEL_FILE = 4;
     private final Context mContext = MainActivity.this;
     private Status mStatus = Status.STATUS_UNKNOWN;
-    private Bitmap inBmp;
-    private Bitmap outBmp;
     final int info[] = new int[3]; // Width, Height, Execution time (ms)
-    private String dbDirPath;
 
     private boolean loadNativeLib(final String lib) {
         boolean ret = true;
@@ -66,8 +139,41 @@ public class MainActivity extends AppCompatActivity {
 
     /* Replaces an exisiting training data set 'if present' with a new one from absPath */
     private boolean importCaffeTrainSet(final String absPath) {
-        boolean ret = true;
+        boolean ret = false;
         Toast.makeText(mContext, absPath, Toast.LENGTH_SHORT).show();
+        String model_file, trained_file, mean_file, label_file;
+
+        File baseDir= new File(absPath);
+
+        File[] caffeFiles;
+        do {
+
+            if(true != baseDir.exists()) {
+                break;
+            }
+
+            caffeFiles = baseDir.listFiles(new CaffeModelFilter());
+            /* FIXME : Query based on file extension */
+            model_file = absPath;
+            model_file += "/deploy.prototxt";
+
+            trained_file = absPath;
+            trained_file += "/bvlc_reference_caffenet.caffemodel";
+
+            mean_file = absPath;
+            mean_file += "/imagenet_mean.binaryproto";
+
+            label_file = absPath;
+            label_file += "/synset_words.txt";
+
+            if(0 != jniCaffeInit(model_file, trained_file, mean_file, label_file)) {
+                break;
+            }
+
+            ret = true;
+
+        }while(false);
+
         return ret;
     }
 
@@ -76,8 +182,30 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        textView = (TextView) findViewById(R.id.textMessage);
-        imageView = (ImageView) findViewById(R.id.imageView);
+        caffeModelPath = (EditText) findViewById(R.id.caffeModelText);
+        caffeTrainPath = (EditText) findViewById(R.id.caffeTrainText);
+        caffeMeanPath = (EditText) findViewById(R.id.caffeMeanText);
+        caffeLabelPath = (EditText) findViewById(R.id.caffeLabelText);
+        caffeImagePath = (EditText) findViewById(R.id.caffeImageText);
+        resultTextView = (TextView) findViewById(R.id.caffeResultTextView);
+
+        /* Install On Click Listeners */
+        caffeModelPath.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                File file = new File(Environment.getExternalStorageDirectory().getAbsolutePath());
+                Log.d("path", file.toString());
+
+                Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                i.setDataAndType(Uri.fromFile(file), "Caffe/prototxt");
+
+                try {
+                    startActivityForResult(i, SELECT_MODEL_FILE);
+                } catch (android.content.ActivityNotFoundException ex) {
+                    Toast.makeText(mContext, "Please install a File Manager.", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
 
         do {
             String nativeLib = mContext.getApplicationInfo().nativeLibraryDir;
@@ -107,9 +235,9 @@ public class MainActivity extends AppCompatActivity {
         }
         try {
             /* Execute JNI Processing Layer */
-            if (0 == jniDoClassify(inBmp, info)) {
-                textView.setText("Image(" + info[0] + "px," + info[1] + "px). Processing time:" + info[3] + "ms");
-                imageView.setImageBitmap(inBmp);
+            if (0 == jniDoClassify(caffeImagePath.getText().toString(), info)) {
+                resultTextView.setText("Image(" + info[0] + "px," + info[1] + "px). Processing time:" + info[3] + "ms");
+//                imageView.setImageBitmap(inBmp);
             }
         }catch (Exception e) {
             e.printStackTrace();
@@ -130,29 +258,15 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode == SELECT_PHOTO && resultCode == RESULT_OK && data != null) {
+        if (requestCode == SELECT_MODEL_FILE && resultCode == RESULT_OK && data != null) {
 
             Uri pickedImage = data.getData();
             Toast.makeText(mContext, "Select image...", Toast.LENGTH_LONG).show();
             String[] filePath = { MediaStore.Images.Media.DATA };
             Cursor cursor = getContentResolver().query(pickedImage, filePath, null, null, null);
             cursor.moveToFirst();
-            String imagePath = cursor.getString(cursor.getColumnIndex(filePath[0]));
-
-            BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-
-            try {
-                inBmp = BitmapFactory.decodeFile(imagePath, options);
-                info[0] = inBmp.getWidth();
-                info[1] = inBmp.getHeight();
-                imageView.setImageBitmap(inBmp);
-            }catch (Exception e) {
-                e.printStackTrace();
-                cursor.close();
-                return;
-            }
-            cursor.close();
+            String modelPath = cursor.getString(cursor.getColumnIndex(filePath[0]));
+            caffeModelPath.setText(modelPath);
         }
     }
 }
