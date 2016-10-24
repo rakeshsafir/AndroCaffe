@@ -107,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
 
     public static native int jniDoClassify(String imgPath, int info[]);
 
+    public static native void jniCaffeDeInit();
 
     /* UI Components */
     EditText    caffeModelPath;
@@ -137,12 +138,37 @@ public class MainActivity extends AppCompatActivity {
         return ret;
     }
 
+    /* Copies file from assets directory to internal data dir */
+    private boolean copyAssetToData(final String f) {
+        boolean ret = true;
+        InputStream in;
+        try {
+            in = getAssets().open(f);
+            final File of = new File(getDir("execdir", MODE_PRIVATE), f);
+
+            final OutputStream out = new FileOutputStream(of);
+
+            final byte b[] = new byte[65535];
+            int sz = 0;
+            while ((sz = in.read(b)) > 0) {
+                out.write(b, 0, sz);
+            }
+            in.close();
+            out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            ret = false;
+        }
+        return ret;
+    }
+
     /* Replaces an exisiting training data set 'if present' with a new one from absPath */
-    private boolean importCaffeTrainSet(final String absPath) {
+    private boolean initCaffeTrainSet() {
         boolean ret = false;
-        Toast.makeText(mContext, absPath, Toast.LENGTH_SHORT).show();
+
         String model_file, trained_file, mean_file, label_file;
 
+        copyAssetToData
         File baseDir= new File(absPath);
 
         File[] caffeFiles;
@@ -234,12 +260,17 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         try {
+
+
             /* Execute JNI Processing Layer */
             if (0 == jniDoClassify(caffeImagePath.getText().toString(), info)) {
                 resultTextView.setText("Image(" + info[0] + "px," + info[1] + "px). Processing time:" + info[3] + "ms");
 //                imageView.setImageBitmap(inBmp);
+
+                jniCaffeDeInit();
             }
         }catch (Exception e) {
+            jniCaffeDeInit();
             e.printStackTrace();
         }
     }
@@ -258,15 +289,21 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode == SELECT_MODEL_FILE && resultCode == RESULT_OK && data != null) {
-
+        if(resultCode == RESULT_OK && data != null) {
             Uri pickedImage = data.getData();
             Toast.makeText(mContext, "Select image...", Toast.LENGTH_LONG).show();
-            String[] filePath = { MediaStore.Images.Media.DATA };
+            String[] filePath = {MediaStore.Images.Media.DATA};
             Cursor cursor = getContentResolver().query(pickedImage, filePath, null, null, null);
             cursor.moveToFirst();
             String modelPath = cursor.getString(cursor.getColumnIndex(filePath[0]));
-            caffeModelPath.setText(modelPath);
+            switch (requestCode) {
+                case SELECT_MODEL_FILE:
+                    caffeModelPath.setText(modelPath);
+                    break;
+                default:
+                    Log.w(TAG, "Invalid request code" + requestCode);
+                    break;
+            }
         }
     }
 }
