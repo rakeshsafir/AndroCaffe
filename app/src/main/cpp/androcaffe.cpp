@@ -1,12 +1,10 @@
 
 #include "androcaffe.h"
 #include "classify.h"
-
 #include <jni.h>
 #include <string>
 #include <android/bitmap.h>
 #include <opencv2/imgproc/imgproc.hpp>
-
 
 jint StdStrFromJniStr(JNIEnv* env, jstring jniStr, std::string &stdStr) {
     jint retCode = 0;
@@ -29,35 +27,20 @@ Classifier *gClassify = NULL;
 extern "C"
 jint
 Java_com_gputech_androcaffe_MainActivity_jniCaffeInit(JNIEnv* env,
-                                                      jclass clazz,
-                                                      jstring model_file,
-                                                      jstring trained_file,
-                                                      jstring mean_file,
-                                                      jstring label_file) {
+                                                      jclass clazz) {
     jint retCode = -1;
-    std::string model_str;
-    std::string trained_str;
-    std::string mean_str;
-    std::string label_str;
+    std::string model_str = "/data/data/com.gputech.androcaffe/app_execdir/model.prototxt";
+    std::string trained_str = "/data/data/com.gputech.androcaffe/app_execdir/model.caffemodel";
+    std::string mean_str = "/data/data/com.gputech.androcaffe/app_execdir/model.binaryproto";
+    std::string label_str = "/data/data/com.gputech.androcaffe/app_execdir/model.txt";
 
     do {
-        if((retCode = StdStrFromJniStr(env, model_file, model_str)) != 0) {
-            break;
-        }
-        if((retCode = StdStrFromJniStr(env, trained_file, trained_str)) != 0) {
-            break;
-        }
-        if((retCode = StdStrFromJniStr(env, mean_file, mean_str)) != 0) {
-            break;
-        }
-        if((retCode = StdStrFromJniStr(env, label_file, label_str)) != 0) {
-            break;
-        }
-
         gClassify = new Classifier(model_str, trained_str, mean_str, label_str);
         if(NULL == gClassify) {
+            LOGE("Failed to create Classifier Object...\n");
             break;
         }
+        LOGI("Classifier Object Created...\n");
         retCode = 0;
 
     }while(0);
@@ -70,28 +53,19 @@ extern "C"
 jint
 Java_com_gputech_androcaffe_MainActivity_jniDoClassify(JNIEnv* env,
                                                        jclass clazz,
-                                                       jstring imgPath,
-                                                       jintArray info) {
+                                                       jstring imgPath) {
 
     jint retCode = -1;
     LOGI("jniDoClassify +--->\n");
 
-    jint *i = NULL;
-    const char *imgPathStr = NULL;
+    const char * imgPathStr = NULL;
+    jboolean isCopy = true;
 
-    jboolean isCopy = false;
-
+    imgPathStr = env->GetStringUTFChars(imgPath, &isCopy);
 
     do {
-        isCopy = false;
-        i = (env)->GetIntArrayElements(info, &isCopy);
-        if(true != isCopy || NULL == i) {
-            break;
-        }
 
-        isCopy = false;
-        imgPathStr = env->GetStringUTFChars(imgPath, &isCopy);
-        if(true != isCopy || NULL == imgPathStr) {
+        if(true != isCopy && NULL != imgPathStr) {
             break;
         }
 
@@ -107,17 +81,7 @@ Java_com_gputech_androcaffe_MainActivity_jniDoClassify(JNIEnv* env,
         retCode = 0;
     }while(0);
 
-    if(NULL != imgPathStr) {
-        env->ReleaseStringUTFChars(imgPath, imgPathStr);
-        imgPathStr = NULL;
-    }
-
-    if(NULL != i) {
-        env->ReleaseIntArrayElements(info, i, 0);
-        i = NULL;
-    }
-
-
+    env->ReleaseStringUTFChars(imgPath, imgPathStr);
 
     LOGI("<----jniDoClassify\n");
 
