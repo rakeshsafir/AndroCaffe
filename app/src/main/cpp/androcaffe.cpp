@@ -23,24 +23,29 @@ jint StdStrFromJniStr(JNIEnv* env, jstring jniStr, std::string &stdStr) {
     return retCode;
 }
 
-Classifier *gClassify = NULL;
+static Classifier *gClassify;
 extern "C"
 jint
 Java_com_gputech_androcaffe_MainActivity_jniCaffeInit(JNIEnv* env,
                                                       jclass clazz) {
     jint retCode = -1;
-    std::string model_str = "/data/data/com.gputech.androcaffe/app_execdir/model.prototxt";
-    std::string trained_str = "/data/data/com.gputech.androcaffe/app_execdir/model.caffemodel";
-    std::string mean_str = "/data/data/com.gputech.androcaffe/app_execdir/model.binaryproto";
-    std::string label_str = "/data/data/com.gputech.androcaffe/app_execdir/model.txt";
+    std::string model_str = "/data/data/com.gputech.androcaffe/app_execdir/caffe.prototxt";
+    std::string trained_str = "/data/data/com.gputech.androcaffe/app_execdir/caffe.caffemodel";
+    std::string mean_str = "/data/data/com.gputech.androcaffe/app_execdir/caffe.binaryproto";
+    std::string label_str = "/data/data/com.gputech.androcaffe/app_execdir/caffe.txt";
 
     do {
-        gClassify = new Classifier(model_str, trained_str, mean_str, label_str);
         if(NULL == gClassify) {
-            LOGE("Failed to create Classifier Object...\n");
-            break;
+            gClassify = new Classifier(model_str, trained_str, mean_str, label_str);
+            if(NULL == gClassify) {
+                LOGE("Failed to create Classifier Object...\n");
+                break;
+            }
+            LOGI("Classifier Object Created...\n");
+        } else {
+            LOGI("Classifier Object already exists...\n");
         }
-        LOGI("Classifier Object Created...\n");
+
         retCode = 0;
 
     }while(0);

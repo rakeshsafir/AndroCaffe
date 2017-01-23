@@ -66,22 +66,30 @@ public class MainActivity extends AppCompatActivity {
         boolean ret = true;
         try {
             System.load(lib);
-            Log.d( TAG, "Loaded file =" + lib);
+            Log.d( TAG, "Loaded file =[" + lib + "]" );
         } catch (UnsatisfiedLinkError err) {
             ret = false;
-            Log.e( TAG, "Failed to load file =" + lib);
+            Log.e( TAG, "Failed to load file =[" + lib + "]" );
         }
         return ret;
     }
 
-    /* Overwrites internal file with contents of an external file */
-    private boolean replaceFile(final String dest, final String src) {
+    /* Imports an external Caffe Trained model into internal data directory */
+    private boolean copyExtFileToData(final String destFName, final String srcFPath, boolean force) {
         boolean ret = true;
 
         try {
-            FileInputStream in = new FileInputStream(src);
-            final File of = new File(getDir("execdir", MODE_PRIVATE), dest);
+            /* Check if file exists */
+            File f = new File(getDir("execdir", MODE_PRIVATE), destFName);
+            if(f.exists() && force && f.delete()) {
+                Log.i(TAG, "Deleted existing " + f.getAbsolutePath());
+            } else {
+                Log.e(TAG, "Cannot replace file " + f.getAbsolutePath());
+                return false;
+            }
 
+            FileInputStream in = new FileInputStream(srcFPath);
+            final File of = new File(getDir("execdir", MODE_PRIVATE), destFName);
             final OutputStream out = new FileOutputStream(of);
 
             final byte b[] = new byte[65535];
@@ -98,15 +106,34 @@ public class MainActivity extends AppCompatActivity {
         return ret;
     }
 
-    /* Replaces an exisiting training data set 'if present' with a new one from absPath */
+    /* Replaces an exisiting training data set 'if present' with a new one from selected paths */
     private boolean importCaffeTrainSet() {
-        boolean ret = true;
+        boolean ret = false;
         do {
-            if(true != replaceFile("model.prototxt", caffeModelPath.getText().toString())) {
+            File f = new File(caffeModelPath.getText().toString());
+            if(f.exists() && copyExtFileToData("caffe.prototxt", caffeModelPath.getText().toString(), true)) {
                 Log.e( TAG, "Failed to load Model(prototxt)=" + caffeModelPath.getText().toString());
                 break;
             }
 
+            f = new File(caffeTrainPath.getText().toString());
+            if(f.exists() && copyExtFileToData("caffe.caffemodel", caffeTrainPath.getText().toString(), true)) {
+                Log.e( TAG, "Failed to load Training data(caffemodel)=" + caffeTrainPath.getText().toString());
+                break;
+            }
+
+            f = new File(caffeMeanPath.getText().toString());
+            if(f.exists() && copyExtFileToData("caffe.binaryproto", caffeMeanPath.getText().toString(), true)) {
+                Log.e( TAG, "Failed to load Mean file(binaryproto)=" + caffeMeanPath.getText().toString());
+                break;
+            }
+
+            f = new File(caffeLabelPath.getText().toString());
+            if(f.exists() && copyExtFileToData("caffe.txt", caffeLabelPath.getText().toString(), true)) {
+                Log.e( TAG, "Failed to load Label file(txt)=" + caffeLabelPath.getText().toString());
+                break;
+            }
+            ret = true;
         }while(false);
 
         return ret;
@@ -121,7 +148,7 @@ public class MainActivity extends AppCompatActivity {
         caffeTrainPath = (TextView) findViewById(R.id.caffeTrainText);
         caffeMeanPath = (TextView) findViewById(R.id.caffeMeanText);
         caffeLabelPath = (TextView) findViewById(R.id.caffeLabelText);
-        caffeImgPath = (TextView) findViewById(R.id.caffeImgText);
+        caffeImgPath = (TextView) findViewById(R.id.caffeImageText);
         caffeResultText = (TextView) findViewById(R.id.caffeResultText);
 
         do {
@@ -146,6 +173,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void doClassify(View v) {
+        if(0 != jniCaffeInit()) {
+            Toast.makeText(mContext, "Caffe Failed to init...", Toast.LENGTH_LONG).show();
+            return;
+        }
         if(mStatus != Status.STATUS_SUCCESS) {
             Toast.makeText(mContext, mStatus.toString(), Toast.LENGTH_LONG).show();
             return;
